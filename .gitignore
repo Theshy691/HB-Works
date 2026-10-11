@@ -1,2 +1,25 @@
-# Google App Engine generated folder
-appengine-generated/
+# Environment Variables & Secrets
+.env
+.env.*
+!.env.example
+
+# Binaries & Executables
+*.exe
+cloudflared.exe
+
+# Dependencies
+node_modules/
+
+# Agent & AI Tooling Caches
+.agents/
+skills-lock.json
+
+# Logs & Temporary Files
+*.log
+npm-debug.log*
+
+# OS & Editor Files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
