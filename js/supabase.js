@@ -94,10 +94,18 @@ export async function pullProductsFromSupabase(silent = false, showToastFn) {
         if (error) throw error;
 
         if (data && data.length > 0) {
-            setProducts(data);
+            const normalized = data.map(p => ({
+                id: p.id,
+                name: p.name || p.product_name || 'Item',
+                barcode: p.barcode || p.barcode_sku || '',
+                price: Number(p.price) || 0,
+                quantity_in_stock: Number(p.quantity_in_stock) || 0,
+                category: p.category || 'General'
+            }));
+            setProducts(normalized);
             if (onProductsUpdatedCallback) onProductsUpdatedCallback();
-            updateDbStatusUI(true, `Connected (${data.length} products synced)`);
-            if (!silent && showToastFn) showToastFn(`Synced ${data.length} products from cloud!`);
+            updateDbStatusUI(true, `Connected (${normalized.length} products synced)`);
+            if (!silent && showToastFn) showToastFn(`Synced ${normalized.length} products from cloud!`);
         } else {
             if (!silent && showToastFn) showToastFn('No products found in cloud table');
         }
@@ -118,7 +126,9 @@ export async function pushProductsToSupabase(showToastFn) {
         if (showToastFn) showToastFn('Uploading products to cloud...');
         const payload = products.map(p => ({
             name: p.name,
+            product_name: p.name,
             barcode: p.barcode,
+            barcode_sku: p.barcode,
             price: Number(p.price) || 0,
             quantity_in_stock: Number(p.quantity_in_stock) || 0,
             category: p.category || 'General'
@@ -190,9 +200,11 @@ export async function syncStockToSupabase(productData) {
     try {
         await supabase.from('products').upsert([{
             name: productData.name,
+            product_name: productData.name,
             barcode: productData.barcode,
-            price: productData.price,
-            quantity_in_stock: productData.quantity_in_stock
+            barcode_sku: productData.barcode,
+            price: Number(productData.price) || 0,
+            quantity_in_stock: Number(productData.quantity_in_stock) || 0
         }], { onConflict: 'barcode' });
     } catch (dbErr) {
         console.warn('Could not sync stock to Supabase:', dbErr);
