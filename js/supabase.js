@@ -18,28 +18,53 @@ export function getSupabaseClient() {
     return supabase;
 }
 
-export function initSupabaseClient() {
+export async function ensureSupabaseClient() {
+    if (supabase) return supabase;
+
     SUPABASE_URL = localStorage.getItem('hb_pos_supabase_url') || DEFAULT_SUPABASE_URL;
     SUPABASE_ANON_KEY = localStorage.getItem('hb_pos_supabase_key') || DEFAULT_SUPABASE_KEY;
 
-    if (SUPABASE_URL && SUPABASE_ANON_KEY && window.createClient) {
+    if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
+        updateDbStatusUI(false, 'Disconnected (Enter Credentials)');
+        return null;
+    }
+
+    let clientFactory = (typeof window !== 'undefined' && window.createClient) || null;
+
+    if (!clientFactory) {
         try {
-            supabase = window.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+            const mod = await import('https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm');
+            if (mod && mod.createClient) {
+                clientFactory = mod.createClient;
+                window.createClient = mod.createClient;
+            }
+        } catch (e) {
+            console.warn('Could not load Supabase ESM module dynamically:', e);
+        }
+    }
+
+    if (clientFactory) {
+        try {
+            supabase = clientFactory(SUPABASE_URL, SUPABASE_ANON_KEY);
             console.log('Supabase client initialized successfully');
             updateDbStatusUI(true, 'Connected to Cloud');
             pullProductsFromSupabase(true);
-            return true;
+            return supabase;
         } catch (err) {
             console.error('Failed to init Supabase client:', err);
             updateDbStatusUI(false, 'Initialization Error');
             supabase = null;
-            return false;
+            return null;
         }
     } else {
-        supabase = null;
         updateDbStatusUI(false, 'Disconnected (Local Storage Only)');
-        return false;
+        return null;
     }
+}
+
+export function initSupabaseClient() {
+    ensureSupabaseClient();
+    return supabase !== null;
 }
 
 export function updateDbStatusUI(isOnline, statusMessage) {
@@ -60,6 +85,7 @@ export function updateDbStatusUI(isOnline, statusMessage) {
 }
 
 export async function checkSupabaseHealth(showToastFn) {
+    await ensureSupabaseClient();
     if (!supabase) {
         updateDbStatusUI(false, 'Disconnected (Enter Credentials)');
         return;
@@ -80,6 +106,7 @@ export async function checkSupabaseHealth(showToastFn) {
 }
 
 export async function pullProductsFromSupabase(silent = false, showToastFn) {
+    await ensureSupabaseClient();
     if (!supabase) {
         if (!silent && showToastFn) showToastFn('Supabase not connected');
         return;
@@ -97,7 +124,7 @@ export async function pullProductsFromSupabase(silent = false, showToastFn) {
             const normalized = data.map(p => ({
                 id: p.id,
                 name: p.name || p.product_name || 'Item',
-                barcode: p.barcode || p.barcode_sku || '',
+                barcode: String(p.barcode || p.barcode_sku || ''),
                 price: Number(p.price) || 0,
                 quantity_in_stock: Number(p.quantity_in_stock) || 0,
                 category: p.category || 'General'
@@ -117,6 +144,7 @@ export async function pullProductsFromSupabase(silent = false, showToastFn) {
 }
 
 export async function pushProductsToSupabase(showToastFn) {
+    await ensureSupabaseClient();
     if (!supabase) {
         if (showToastFn) showToastFn('Supabase not connected');
         return;
@@ -148,21 +176,48 @@ export async function pushProductsToSupabase(showToastFn) {
     }
 }
 
-export async function findProductInSupabase(barcode) {
+export async function findProductInSupabase(query) {
+    await ensureSupabaseClient();
     if (!supabase) return null;
+    const cleanQuery = String(query).trim();
+    if (!cleanQuery) return null;
+
     try {
-        const { data, error } = await supabase
+        // 1. Try exact barcode match first
+        let { data, error } = await supabase
             .from('products')
             .select('*')
-            .eq('barcode', barcode)
-            .single();
+            .eq('barcode', cleanQuery)
+            .limit(1)
+            .maybeSingle();
 
-        if (!error && data) {
-            if (!products.some(p => p.id === data.id || p.barcode === data.barcode)) {
-                products.push(data);
-                saveLocalState();
+        // 2. If not found by barcode, search by name (case-insensitive substring)
+        if (!data) {
+            const res = await supabase
+                .from('products')
+                .select('*')
+                .ilike('name', `%${cleanQuery}%`)
+                .limit(1);
+            if (res.data && res.data.length > 0) {
+                data = res.data[0];
             }
-            return data;
+        }
+
+        if (data) {
+            const normalized = {
+                id: data.id,
+                name: data.name || data.product_name || 'Item',
+                barcode: String(data.barcode || data.barcode_sku || ''),
+                price: Number(data.price) || 0,
+                quantity_in_stock: Number(data.quantity_in_stock) || 0,
+                category: data.category || 'General'
+            };
+            if (!products.some(p => p.id === normalized.id || (normalized.barcode && p.barcode === normalized.barcode))) {
+                products.push(normalized);
+                saveLocalState();
+                if (onProductsUpdatedCallback) onProductsUpdatedCallback();
+            }
+            return normalized;
         }
     } catch (err) {
         console.error('Supabase product lookup error:', err);
@@ -171,31 +226,39 @@ export async function findProductInSupabase(barcode) {
 }
 
 export async function syncSaleToSupabase(saleRecord, cartItems) {
-    if (!supabase) return;
+    await ensureSupabaseClient();
+    if (!supabase) return false;
     try {
-        await supabase.from('sales').insert([{
+        const { error: saleErr } = await supabase.from('sales').insert([{
             transaction_id: saleRecord.id,
-            total_amount: saleRecord.total,
+            total_amount: Number(saleRecord.total) || 0,
             payment_method: saleRecord.payMethod,
-            amount_tendered: saleRecord.tendered,
-            change_amount: saleRecord.change,
+            amount_tendered: Number(saleRecord.tendered) || 0,
+            change_amount: Number(saleRecord.change) || 0,
             items: saleRecord.items
         }]);
 
+        if (saleErr) console.warn('Supabase sale insert warning:', saleErr);
+
         for (const cartItem of cartItems) {
-            const prod = products.find(p => p.id === cartItem.id || p.barcode === cartItem.barcode);
-            if (prod) {
+            const barcode = cartItem.barcode;
+            if (barcode) {
+                const prod = products.find(p => p.barcode === barcode);
+                const newStock = prod ? prod.quantity_in_stock : 0;
                 await supabase.from('products')
-                    .update({ quantity_in_stock: prod.quantity_in_stock })
-                    .eq('barcode', prod.barcode);
+                    .update({ quantity_in_stock: newStock })
+                    .eq('barcode', barcode);
             }
         }
+        return true;
     } catch (dbErr) {
         console.warn('Supabase sync warning (stored locally):', dbErr);
+        return false;
     }
 }
 
 export async function syncStockToSupabase(productData) {
+    await ensureSupabaseClient();
     if (!supabase) return;
     try {
         await supabase.from('products').upsert([{

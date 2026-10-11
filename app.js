@@ -34,6 +34,7 @@ import {
     showToast,
     setupTabNavigation,
     setupCartActions,
+    renderQuickProductCatalog,
     renderCart,
     renderInventory,
     renderIncomeDashboard,
@@ -44,28 +45,55 @@ import {
     setupIosPwaBanner
 } from './js/ui.js';
 
-// --- Barcode Lookup & Cart Router ---
-export async function findAndAddToCart(barcode) {
+// --- Barcode / Product Lookup & Cart Router ---
+export async function findAndAddToCart(input) {
     initAudio();
 
-    // 1. Check local cache
-    let product = products.find(p => p.barcode === barcode);
+    if (!input) return;
 
-    // 2. Fallback to Supabase cloud lookup if not found locally
-    if (!product) {
-        product = await findProductInSupabase(barcode);
+    let product = null;
+
+    if (typeof input === 'object' && input !== null) {
+        // Direct product object passed from quick catalog tile tap
+        product = input;
+    } else {
+        const query = String(input).trim();
+        if (!query) return;
+
+        const lower = query.toLowerCase();
+
+        // 1. Exact barcode match or exact name match in local cache
+        product = products.find(p => {
+            const b = String(p.barcode || p.barcode_sku || '');
+            const n = String(p.name || p.product_name || '').toLowerCase();
+            return b === query || n === lower;
+        });
+
+        // 2. Partial barcode or partial name match in local cache
+        if (!product) {
+            product = products.find(p => {
+                const b = String(p.barcode || p.barcode_sku || '');
+                const n = String(p.name || p.product_name || '').toLowerCase();
+                return b.includes(query) || n.includes(lower);
+            });
+        }
+
+        // 3. Cloud lookup via Supabase
+        if (!product) {
+            product = await findProductInSupabase(query);
+        }
     }
 
     if (product) {
         addToCart(product);
         renderCart();
         playBeep('success');
-        showToast(`Added: ${product.name}`);
+        showToast(`Added: ${product.name || 'Item'}`);
     } else {
         playBeep('error');
-        showToast(`Unknown Barcode: ${barcode}`);
-        if (confirm(`Barcode "${barcode}" not in inventory. Would you like to add it now?`)) {
-            openReceiveStockModal(barcode);
+        showToast(`Not found: ${input}`);
+        if (confirm(`Item "${input}" not found in inventory. Would you like to add it now?`)) {
+            openReceiveStockModal(typeof input === 'string' ? input : '');
         }
     }
 }
@@ -74,40 +102,55 @@ export async function findAndAddToCart(barcode) {
 export async function processSale(total, payMethod, tendered) {
     const txnId = `TXN-${Math.floor(1000 + Math.random() * 9000)}`;
     const change = Math.max(0, tendered - total);
+    const cartSnapshot = cart.map(i => ({ ...i }));
+
     const saleRecord = {
         id: txnId,
         timestamp: new Date().toISOString(),
-        total: total,
+        total: Number(total) || 0,
         payMethod: payMethod,
-        tendered: tendered,
-        change: change,
-        itemsCount: cart.reduce((sum, i) => sum + i.cart_quantity, 0),
-        items: cart.map(i => ({ id: i.id, name: i.name, barcode: i.barcode, qty: i.cart_quantity, price: i.price }))
+        tendered: Number(tendered) || 0,
+        change: Number(change) || 0,
+        itemsCount: cartSnapshot.reduce((sum, i) => sum + (Number(i.cart_quantity) || 1), 0),
+        items: cartSnapshot.map(i => ({
+            id: i.id,
+            name: i.name,
+            barcode: i.barcode,
+            qty: Number(i.cart_quantity) || 1,
+            price: Number(i.price) || 0
+        }))
     };
 
     // 1. Deduct stock locally
-    cart.forEach(cartItem => {
-        const prod = products.find(p => p.id === cartItem.id || p.barcode === cartItem.barcode);
+    cartSnapshot.forEach(cartItem => {
+        const prod = products.find(p => (cartItem.barcode && p.barcode === cartItem.barcode) || p.id === cartItem.id);
         if (prod) {
-            prod.quantity_in_stock = Math.max(0, prod.quantity_in_stock - cartItem.cart_quantity);
+            prod.quantity_in_stock = Math.max(0, (Number(prod.quantity_in_stock) || 0) - (Number(cartItem.cart_quantity) || 1));
         }
     });
 
     // 2. Record transaction locally
     addTransaction(saleRecord);
 
-    // 3. Sync to Supabase cloud in background
-    await syncSaleToSupabase(saleRecord, cart);
-
-    // 4. POS feedback & Receipt
+    // 3. Immediate POS feedback & Receipt (instant UI, no blocking on network)
     playBeep('checkout');
     showReceiptModal(saleRecord);
 
-    // 5. Reset Cart and update views
+    // 4. Reset Cart and update views
     clearCart();
     renderCart();
     renderInventory();
     renderIncomeDashboard();
+    renderQuickProductCatalog(findAndAddToCart);
+
+    // 5. Cloud sync to Supabase in background
+    syncSaleToSupabase(saleRecord, cartSnapshot).then(success => {
+        if (success) {
+            console.log('Sale successfully synced to cloud.');
+        }
+    }).catch(err => {
+        console.warn('Background Supabase sync error:', err);
+    });
 }
 
 // --- Barcode Scan Event Router ---
@@ -125,9 +168,10 @@ registerOnScan((scannedCode) => {
     findAndAddToCart(scannedCode);
 });
 
-// Update inventory view whenever cloud sync finishes
+// Update inventory and quick catalog whenever cloud sync finishes
 registerOnProductsUpdated(() => {
     renderInventory();
+    renderQuickProductCatalog(findAndAddToCart);
 });
 
 // --- Service Worker ---
@@ -162,4 +206,5 @@ document.addEventListener('DOMContentLoaded', () => {
     renderCart();
     renderInventory();
     renderIncomeDashboard();
+    renderQuickProductCatalog(findAndAddToCart);
 });

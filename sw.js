@@ -1,5 +1,5 @@
 // Service Worker for HB Works POS
-const CACHE_NAME = 'hb-pos-cache-v3';
+const CACHE_NAME = 'hb-pos-cache-v4';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',

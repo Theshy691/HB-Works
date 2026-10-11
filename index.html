@@ -84,6 +84,16 @@
                 </div>
             </div>
 
+            <!-- Quick-Tap Product Catalog -->
+            <div class="card catalog-card">
+                <div class="card-header-row">
+                    <h2>Tap to Add (<span id="catalog-item-count">0</span>)</h2>
+                    <span class="catalog-hint-badge">⚡ Quick POS</span>
+                </div>
+                <div class="catalog-categories-bar" id="catalog-categories-bar"></div>
+                <div class="sell-catalog-grid" id="sell-catalog-grid"></div>
+            </div>
+
             <!-- Cart Card -->
             <div class="card cart-card">
                 <div class="card-header-row">
@@ -94,7 +104,7 @@
                 <div id="empty-cart-state" class="empty-state">
                     <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#8e8e93" stroke-width="1.5"><circle cx="9" cy="21" r="1"></circle><circle cx="20" cy="21" r="1"></circle><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"></path></svg>
                     <p>Cart is empty</p>
-                    <span class="subtext">Scan a barcode with your Bluetooth gun, tap camera scan, or search above</span>
+                    <span class="subtext">Tap any product above, scan barcode, or search</span>
                 </div>
 
                 <ul class="item-list" id="cart-list">
@@ -104,22 +114,22 @@
                 <div class="cart-summary" id="cart-summary-section">
                     <div class="summary-row">
                         <span>Subtotal</span>
-                        <span id="cart-subtotal">$0.00</span>
+                        <span id="cart-subtotal">₱0.00</span>
                     </div>
                     <div class="summary-row">
                         <span>Tax (0%)</span>
-                        <span>$0.00</span>
+                        <span>₱0.00</span>
                     </div>
                     <div class="summary-row total">
                         <span>Total Due</span>
-                        <span id="cart-total">$0.00</span>
+                        <span id="cart-total">₱0.00</span>
                     </div>
                 </div>
             </div>
 
             <button class="success-btn btn-large complete-sale-btn" id="proceed-checkout-btn" disabled>
                 <span>Proceed to Payment</span>
-                <span id="checkout-btn-total">$0.00</span>
+                <span id="checkout-btn-total">₱0.00</span>
             </button>
         </section>
 
@@ -152,7 +162,7 @@
         <section id="tab-income" class="tab-content">
             <div class="dashboard-card">
                 <h3>Today's Total Revenue</h3>
-                <div class="revenue-amount" id="today-revenue">$0.00</div>
+                <div class="revenue-amount" id="today-revenue">₱0.00</div>
                 <div class="dashboard-stats-row">
                     <div class="stat-col">
                         <span class="stat-val" id="today-order-count">0</span>
@@ -163,7 +173,7 @@
                         <span class="stat-lbl">Items Sold</span>
                     </div>
                     <div class="stat-col">
-                        <span class="stat-val" id="today-avg-ticket">$0.00</span>
+                        <span class="stat-val" id="today-avg-ticket">₱0.00</span>
                         <span class="stat-lbl">Avg Ticket</span>
                     </div>
                 </div>
@@ -241,7 +251,7 @@
             <div class="modal-body">
                 <div class="checkout-total-banner">
                     <span>Total Amount</span>
-                    <strong id="modal-total-amount">$0.00</strong>
+                    <strong id="modal-total-amount">₱0.00</strong>
                 </div>
 
                 <div class="payment-method-selector">
@@ -255,24 +265,25 @@
                     </label>
                     <label class="payment-method-btn">
                         <input type="radio" name="payment-method" value="Transfer">
-                        <span>📱 QR / Pay</span>
+                        <span>📱 GCash / Pay</span>
                     </label>
                 </div>
 
                 <div id="cash-calculator-section" class="cash-calc-box">
-                    <label for="cash-received-input">Cash Tendered ($):</label>
+                    <label for="cash-received-input">Cash Tendered (₱):</label>
                     <input type="number" id="cash-received-input" step="any" placeholder="0.00" inputmode="decimal">
 
                     <div class="quick-cash-row">
                         <button type="button" class="quick-cash-btn" data-type="exact">Exact</button>
-                        <button type="button" class="quick-cash-btn" data-val="20">$20</button>
-                        <button type="button" class="quick-cash-btn" data-val="50">$50</button>
-                        <button type="button" class="quick-cash-btn" data-val="100">$100</button>
+                        <button type="button" class="quick-cash-btn" data-val="100">₱100</button>
+                        <button type="button" class="quick-cash-btn" data-val="500">₱500</button>
+                        <button type="button" class="quick-cash-btn" data-val="1000">₱1,000</button>
+                        <button type="button" class="quick-cash-btn" data-val="2000">₱2,000</button>
                     </div>
 
                     <div class="change-due-row">
                         <span>Change Due:</span>
-                        <strong id="change-due-val" class="change-due-amount">$0.00</strong>
+                        <strong id="change-due-val" class="change-due-amount">₱0.00</strong>
                     </div>
                 </div>
 
@@ -311,7 +322,7 @@
 
                     <div class="form-row">
                         <div class="form-group">
-                            <label for="stock-price">Selling Price ($)</label>
+                            <label for="stock-price">Selling Price (₱)</label>
                             <input type="number" id="stock-price" step="0.01" min="0" required placeholder="0.00" inputmode="decimal">
                         </div>
                         <div class="form-group">
@@ -345,15 +356,15 @@
                 <div class="receipt-totals">
                     <div class="receipt-total-row">
                         <span>Total:</span>
-                        <strong id="receipt-total-amount">$0.00</strong>
+                        <strong id="receipt-total-amount">₱0.00</strong>
                     </div>
                     <div class="receipt-total-row">
                         <span>Paid (<span id="receipt-pay-method">Cash</span>):</span>
-                        <span id="receipt-paid-amount">$0.00</span>
+                        <span id="receipt-paid-amount">₱0.00</span>
                     </div>
                     <div class="receipt-total-row">
                         <span>Change:</span>
-                        <span id="receipt-change-amount">$0.00</span>
+                        <span id="receipt-change-amount">₱0.00</span>
                     </div>
                 </div>
                 <div class="receipt-footer">

@@ -11,9 +11,13 @@ import {
     setCurrentActiveTab,
     saveLocalState,
     setTransactions,
-    escapeHtml
+    escapeHtml,
+    formatCurrency,
+    CURRENCY_SYMBOL
 } from './state.js';
 import { playBeep, initAudio } from './audio.js';
+
+let activeCatalogCategory = 'all';
 
 export function showToast(message) {
     const toast = document.getElementById('scan-toast');
@@ -57,31 +61,126 @@ export function setupTabNavigation() {
                 pageTitle.textContent = titles[targetId];
             }
 
+            if (targetId === 'sell') {
+                renderCart();
+                renderQuickProductCatalog();
+            }
             if (targetId === 'inventory') renderInventory();
             if (targetId === 'income') renderIncomeDashboard();
         });
     });
 }
 
+// --- Quick Tap Product Catalog on Sell Tab ---
+let cachedOnItemSelectFn = null;
+
+export function renderQuickProductCatalog(onItemSelectFn, filterText = '') {
+    if (onItemSelectFn) cachedOnItemSelectFn = onItemSelectFn;
+    const selectCallback = cachedOnItemSelectFn;
+
+    const catalogGrid = document.getElementById('sell-catalog-grid');
+    const catalogCountEl = document.getElementById('catalog-item-count');
+    const categoryContainer = document.getElementById('catalog-categories-bar');
+
+    if (!catalogGrid) return;
+
+    // Render Category Filter Pills if container exists
+    if (categoryContainer) {
+        const categories = ['all', ...new Set(products.map(p => p.category || 'General'))];
+        categoryContainer.innerHTML = '';
+        categories.forEach(cat => {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = `catalog-cat-pill ${activeCatalogCategory === cat ? 'active' : ''}`;
+            btn.textContent = cat === 'all' ? 'All Items' : cat;
+            btn.addEventListener('click', () => {
+                activeCatalogCategory = cat;
+                categoryContainer.querySelectorAll('.catalog-cat-pill').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                renderQuickProductCatalog(selectCallback, filterText);
+            });
+            categoryContainer.appendChild(btn);
+        });
+    }
+
+    catalogGrid.innerHTML = '';
+    const term = (filterText || '').toLowerCase().trim();
+
+    const filtered = products.filter(p => {
+        if (activeCatalogCategory !== 'all' && (p.category || 'General') !== activeCatalogCategory) {
+            return false;
+        }
+        if (!term) return true;
+        const name = String(p.name || p.product_name || '').toLowerCase();
+        const barcode = String(p.barcode || p.barcode_sku || '');
+        const cat = String(p.category || '').toLowerCase();
+        return name.includes(term) || barcode.includes(term) || cat.includes(term);
+    });
+
+    if (catalogCountEl) catalogCountEl.textContent = filtered.length;
+
+    if (filtered.length === 0) {
+        catalogGrid.innerHTML = `
+            <div class="catalog-empty-chip">
+                <span>No matching products found.</span>
+            </div>
+        `;
+        return;
+    }
+
+    filtered.forEach(p => {
+        const itemBtn = document.createElement('button');
+        itemBtn.type = 'button';
+        itemBtn.className = 'catalog-product-card';
+        const inStock = Number(p.quantity_in_stock) || 0;
+        const isLow = inStock < 10;
+        const itemPrice = Number(p.price) || 0;
+
+        itemBtn.innerHTML = `
+            <div class="card-top">
+                <span class="card-name">${escapeHtml(p.name || 'Item')}</span>
+                <span class="card-stock ${isLow ? 'low' : ''}">${inStock} left</span>
+            </div>
+            <div class="card-bottom">
+                <span class="card-cat">${escapeHtml(p.category || 'General')}</span>
+                <span class="card-price">${formatCurrency(itemPrice)}</span>
+            </div>
+        `;
+
+        itemBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            initAudio();
+            if (selectCallback) selectCallback(p);
+        });
+
+        catalogGrid.appendChild(itemBtn);
+    });
+}
+
 // --- Cart Actions & Rendering ---
 export function setupCartActions(findAndAddToCartFn) {
+    cachedOnItemSelectFn = findAndAddToCartFn;
     const quickInput = document.getElementById('cart-quick-input');
     const quickAddBtn = document.getElementById('quick-add-btn');
     const clearCartBtn = document.getElementById('clear-cart-btn');
 
+    // Live search filter as the user types
+    if (quickInput) {
+        quickInput.addEventListener('input', (e) => {
+            renderQuickProductCatalog(findAndAddToCartFn, e.target.value);
+        });
+    }
+
     const handleQuickAdd = () => {
-        const query = quickInput.value.trim();
+        const query = (quickInput ? quickInput.value : '').trim();
         if (!query) return;
 
-        const product = products.find(p => p.barcode === query || p.name.toLowerCase().includes(query.toLowerCase()));
-        if (product) {
-            findAndAddToCartFn(product.barcode);
+        findAndAddToCartFn(query);
+        if (quickInput) {
             quickInput.value = '';
             quickInput.blur();
-        } else {
-            playBeep('error');
-            alert(`No item found matching "${query}".`);
         }
+        renderQuickProductCatalog(findAndAddToCartFn, '');
     };
 
     if (quickAddBtn) quickAddBtn.addEventListener('click', handleQuickAdd);
@@ -103,6 +202,9 @@ export function setupCartActions(findAndAddToCartFn) {
             }
         });
     }
+
+    // Initial render of the quick catalog
+    renderQuickProductCatalog(findAndAddToCartFn);
 }
 
 export function renderCart() {
@@ -118,8 +220,8 @@ export function renderCart() {
     if (!cartList) return;
 
     cartList.innerHTML = '';
-    const totalItems = cart.reduce((sum, item) => sum + item.cart_quantity, 0);
-    const totalSum = cart.reduce((sum, item) => sum + (item.price * item.cart_quantity), 0);
+    const totalItems = cart.reduce((sum, item) => sum + (Number(item.cart_quantity) || 0), 0);
+    const totalSum = cart.reduce((sum, item) => sum + ((Number(item.price) || 0) * (Number(item.cart_quantity) || 0)), 0);
 
     if (cartCountEl) cartCountEl.textContent = totalItems;
 
@@ -127,9 +229,9 @@ export function renderCart() {
         if (emptyState) emptyState.classList.remove('hidden');
         if (clearCartBtn) clearCartBtn.classList.add('hidden');
         if (checkoutBtn) checkoutBtn.disabled = true;
-        if (subtotalEl) subtotalEl.textContent = '$0.00';
-        if (totalEl) totalEl.textContent = '$0.00';
-        if (checkoutBtnTotal) checkoutBtnTotal.textContent = '$0.00';
+        if (subtotalEl) subtotalEl.textContent = formatCurrency(0);
+        if (totalEl) totalEl.textContent = formatCurrency(0);
+        if (checkoutBtnTotal) checkoutBtnTotal.textContent = formatCurrency(0);
         return;
     }
 
@@ -138,22 +240,24 @@ export function renderCart() {
     if (checkoutBtn) checkoutBtn.disabled = false;
 
     cart.forEach(item => {
-        const itemTotal = item.price * item.cart_quantity;
+        const itemPrice = Number(item.price) || 0;
+        const itemQty = Number(item.cart_quantity) || 1;
+        const itemTotal = itemPrice * itemQty;
         const li = document.createElement('li');
         li.className = 'item';
         li.innerHTML = `
             <div class="item-info">
-                <span class="item-name">${escapeHtml(item.name)}</span>
-                <span class="item-barcode">BC: ${escapeHtml(item.barcode)} • $${item.price.toFixed(2)} ea</span>
+                <span class="item-name">${escapeHtml(item.name || 'Item')}</span>
+                <span class="item-barcode">BC: ${escapeHtml(item.barcode || 'N/A')} • ${formatCurrency(itemPrice)} ea</span>
             </div>
             <div class="item-right-actions">
                 <div class="qty-stepper">
-                    <button class="qty-step-btn" data-action="dec" data-id="${item.id}" aria-label="Decrease">&minus;</button>
-                    <span class="qty-display">${item.cart_quantity}</span>
-                    <button class="qty-step-btn" data-action="inc" data-id="${item.id}" aria-label="Increase">&plus;</button>
+                    <button type="button" class="qty-step-btn" data-action="dec" data-id="${item.id}" aria-label="Decrease">&minus;</button>
+                    <span class="qty-display">${itemQty}</span>
+                    <button type="button" class="qty-step-btn" data-action="inc" data-id="${item.id}" aria-label="Increase">&plus;</button>
                 </div>
-                <span class="item-price">$${itemTotal.toFixed(2)}</span>
-                <button class="delete-item-btn" data-id="${item.id}" aria-label="Remove item">
+                <span class="item-price">${formatCurrency(itemTotal)}</span>
+                <button type="button" class="delete-item-btn" data-id="${item.id}" aria-label="Remove item">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                 </button>
             </div>
@@ -180,7 +284,7 @@ export function renderCart() {
         });
     });
 
-    const formattedTotal = `$${totalSum.toFixed(2)}`;
+    const formattedTotal = formatCurrency(totalSum);
     if (subtotalEl) subtotalEl.textContent = formattedTotal;
     if (totalEl) totalEl.textContent = formattedTotal;
     if (checkoutBtnTotal) checkoutBtnTotal.textContent = formattedTotal;
@@ -201,7 +305,7 @@ export function setupCheckoutModal(processSaleFn) {
 
     let selectedMethod = 'Cash';
 
-    const getCartTotal = () => cart.reduce((sum, item) => sum + (item.price * item.cart_quantity), 0);
+    const getCartTotal = () => cart.reduce((sum, item) => sum + ((Number(item.price) || 0) * (Number(item.cart_quantity) || 0)), 0);
 
     const updateChangeCalculation = () => {
         const total = getCartTotal();
@@ -209,10 +313,10 @@ export function setupCheckoutModal(processSaleFn) {
         const change = tendered - total;
 
         if (change >= 0) {
-            changeDueVal.textContent = `$${change.toFixed(2)}`;
+            changeDueVal.textContent = formatCurrency(change);
             changeDueVal.style.color = 'var(--success-color)';
         } else {
-            changeDueVal.textContent = `-$${Math.abs(change).toFixed(2)}`;
+            changeDueVal.textContent = `-${formatCurrency(Math.abs(change))}`;
             changeDueVal.style.color = 'var(--danger-color)';
         }
     };
@@ -221,9 +325,9 @@ export function setupCheckoutModal(processSaleFn) {
         proceedBtn.addEventListener('click', () => {
             if (cart.length === 0) return;
             const total = getCartTotal();
-            if (modalTotalAmount) modalTotalAmount.textContent = `$${total.toFixed(2)}`;
+            if (modalTotalAmount) modalTotalAmount.textContent = formatCurrency(total);
             if (cashInput) {
-                cashInput.value = total.toFixed(2);
+                cashInput.value = total > 0 ? total.toFixed(2) : '';
                 updateChangeCalculation();
             }
             if (checkoutModal) checkoutModal.classList.remove('hidden');
@@ -262,7 +366,9 @@ export function setupCheckoutModal(processSaleFn) {
                 cashInput.value = total.toFixed(2);
             } else {
                 const val = parseFloat(btn.getAttribute('data-val'));
-                cashInput.value = val.toFixed(2);
+                if (!isNaN(val)) {
+                    cashInput.value = val.toFixed(2);
+                }
             }
             updateChangeCalculation();
         });
@@ -274,7 +380,7 @@ export function setupCheckoutModal(processSaleFn) {
             const tendered = selectedMethod === 'Cash' ? (parseFloat(cashInput.value) || total) : total;
 
             if (selectedMethod === 'Cash' && tendered < total) {
-                if (!confirm(`Tendered amount ($${tendered.toFixed(2)}) is less than total ($${total.toFixed(2)}). Continue anyway?`)) {
+                if (!confirm(`Tendered amount (${formatCurrency(tendered)}) is less than total (${formatCurrency(total)}). Continue anyway?`)) {
                     return;
                 }
             }
@@ -310,9 +416,9 @@ export function showReceiptModal(sale) {
 
     if (receiptTime) receiptTime.textContent = new Date(sale.timestamp).toLocaleString();
     if (receiptTxn) receiptTxn.textContent = `Receipt #${sale.id}`;
-    if (receiptTotal) receiptTotal.textContent = `$${sale.total.toFixed(2)}`;
-    if (receiptPaid) receiptPaid.textContent = `$${sale.tendered.toFixed(2)}`;
-    if (receiptChange) receiptChange.textContent = `$${sale.change.toFixed(2)}`;
+    if (receiptTotal) receiptTotal.textContent = formatCurrency(sale.total);
+    if (receiptPaid) receiptPaid.textContent = formatCurrency(sale.tendered);
+    if (receiptChange) receiptChange.textContent = formatCurrency(sale.change);
     if (receiptMethod) receiptMethod.textContent = sale.payMethod;
 
     if (receiptList && sale.items) {
@@ -321,8 +427,8 @@ export function showReceiptModal(sale) {
             const line = document.createElement('div');
             line.className = 'receipt-line';
             line.innerHTML = `
-                <span>${item.qty}x ${escapeHtml(item.name)}</span>
-                <span>$${(item.price * item.qty).toFixed(2)}</span>
+                <span>${item.qty}x ${escapeHtml(item.name || 'Item')}</span>
+                <span>${formatCurrency((Number(item.price) || 0) * (Number(item.qty) || 1))}</span>
             `;
             receiptList.appendChild(line);
         });
@@ -405,6 +511,7 @@ export function setupReceiveStockModal(onStockSavedFn, startCameraFn) {
 
             saveLocalState();
             renderInventory();
+            renderQuickProductCatalog();
             playBeep('success');
             showToast(`Inventory updated for ${name}`);
 
@@ -450,7 +557,7 @@ export function renderInventory(searchTerm = '') {
 
     list.innerHTML = '';
 
-    const lowStockItems = products.filter(p => p.quantity_in_stock < 10);
+    const lowStockItems = products.filter(p => Number(p.quantity_in_stock) < 10);
     if (lowStockCountEl) lowStockCountEl.textContent = lowStockItems.length;
 
     let filtered = products;
@@ -461,7 +568,11 @@ export function renderInventory(searchTerm = '') {
 
     if (searchTerm) {
         const term = searchTerm.toLowerCase();
-        filtered = filtered.filter(p => p.name.toLowerCase().includes(term) || p.barcode.includes(term));
+        filtered = filtered.filter(p => {
+            const name = String(p.name || p.product_name || '').toLowerCase();
+            const barcode = String(p.barcode || p.barcode_sku || '');
+            return name.includes(term) || barcode.includes(term);
+        });
     }
 
     if (filtered.length === 0) {
@@ -475,13 +586,13 @@ export function renderInventory(searchTerm = '') {
     }
 
     filtered.forEach(item => {
-        const isLow = item.quantity_in_stock < 10;
+        const isLow = Number(item.quantity_in_stock) < 10;
         const li = document.createElement('li');
         li.className = 'item';
         li.innerHTML = `
             <div class="item-info">
-                <span class="item-name">${escapeHtml(item.name)}</span>
-                <span class="item-barcode">BC: ${escapeHtml(item.barcode)} • $${item.price.toFixed(2)}</span>
+                <span class="item-name">${escapeHtml(item.name || 'Item')}</span>
+                <span class="item-barcode">BC: ${escapeHtml(item.barcode || 'N/A')} • ${formatCurrency(item.price)}</span>
             </div>
             <div class="stock-info">
                 <span class="stock-tag ${isLow ? 'low-stock' : ''}">${item.quantity_in_stock} in stock</span>
@@ -500,15 +611,15 @@ export function renderIncomeDashboard() {
     const txnList = document.getElementById('transaction-list');
     const clearTxnBtn = document.getElementById('clear-transactions-btn');
 
-    const totalRevenue = transactions.reduce((sum, t) => sum + t.total, 0);
+    const totalRevenue = transactions.reduce((sum, t) => sum + (Number(t.total) || 0), 0);
     const totalOrders = transactions.length;
-    const totalItems = transactions.reduce((sum, t) => sum + (t.itemsCount || 1), 0);
+    const totalItems = transactions.reduce((sum, t) => sum + (Number(t.itemsCount) || 1), 0);
     const avgTicket = totalOrders > 0 ? totalRevenue / totalOrders : 0;
 
-    if (todayRevenueEl) todayRevenueEl.textContent = `$${totalRevenue.toFixed(2)}`;
+    if (todayRevenueEl) todayRevenueEl.textContent = formatCurrency(totalRevenue);
     if (todayOrdersEl) todayOrdersEl.textContent = totalOrders;
     if (todayItemsSoldEl) todayItemsSoldEl.textContent = totalItems;
-    if (todayAvgTicketEl) todayAvgTicketEl.textContent = `$${avgTicket.toFixed(2)}`;
+    if (todayAvgTicketEl) todayAvgTicketEl.textContent = formatCurrency(avgTicket);
 
     if (txnList) {
         txnList.innerHTML = '';
@@ -532,7 +643,7 @@ export function renderIncomeDashboard() {
                     <span class="item-name">${escapeHtml(txn.id)}</span>
                     <span class="item-time">${timeStr} • ${escapeHtml(txn.payMethod || 'Sale')} (${txn.itemsCount || 1} items)</span>
                 </div>
-                <span class="item-price positive">+$${txn.total.toFixed(2)}</span>
+                <span class="item-price positive">+${formatCurrency(txn.total)}</span>
             `;
             li.addEventListener('click', () => {
                 showReceiptModal(txn);
