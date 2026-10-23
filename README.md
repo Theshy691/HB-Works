@@ -1,60 +1,63 @@
-# HB Works Mobile POS 🏍️
+# HB Works Mobile POS 🏍️ (React Native)
 
-Modern, mobile-first Point of Sale (POS) and inventory management web application optimized for iOS devices (iPhone) and physical retail motor shops.
+Cross-platform React Native (Expo) Point of Sale (POS) and inventory management mobile application optimized for iOS, Android, and Web in retail motor shops.
 
 ## Features
 
-- 📱 **Native-like iOS PWA**: Full-screen standalone operation, safe area notch handling, Apple touch icons, and offline caching via Service Worker.
-- 📷 **Live Camera Barcode Scanner**: Built-in rear-camera barcode scanner with continuous autofocus, targeting reticle, and laser scanning animation.
-- 🔫 **External Barcode Gun Ready**: Automatic background listener for Bluetooth and wireless USB HID barcode scanner guns (<50ms keystroke capture).
-- 💵 **Cash Register & Change Due**: One-tap quick tender buttons (₱100, ₱500, ₱1,000, etc.), change calculations, and instant thermal receipt preview.
-- 📦 **Live Inventory & Cloud Sync**: Seamless integration with Supabase for real-time stock deductions, new item creation, and cloud transaction recording.
-- 🔊 **Web Audio POS Chimes**: Synthesized audio feedback for scan confirmations, cash register chimes, and error buzzers.
+- 📱 **True Native Mobile UI**: Built with React Native & Expo with fluid gestures, native modals, safe-area notches, and rich theme styling.
+- 📷 **Native Camera Barcode Scanner**: Built-in rear camera barcode scanner via `expo-camera` with targeting reticle and animated laser scanline.
+- 🔫 **External Barcode Gun Ready**: Seamless background listener for Bluetooth and wireless USB HID barcode scanner guns (<50ms keystroke capture).
+- 💵 **Cash Register & Change Due**: One-tap quick tender buttons (₱100, ₱200, ₱500, ₱1,000, ₱2,000, Exact), change calculation with visual feedback.
+- 🧾 **Thermal Paper Receipt**: Authentic monospace thermal receipt preview with share and print integration.
+- 📦 **Live Inventory & Cloud Sync**: Full integration with Supabase for real-time stock deductions, new item creation, offline queue auto-sync, and cloud sales recording.
+- 🔊 **Native Haptics & Audio Chimes**: Tactile feedback with `expo-haptics` and pleasant audio chimes on scan confirmations, checkouts, and alerts.
 
 ## Project Structure
 
 ```
 HB WORKS/
-├── js/
-│   ├── state.js      # Central reactive store & localStorage persistence
-│   ├── audio.js      # Web Audio API scanner & checkout chimes
-│   ├── scanner.js    # Bluetooth gun listener & camera viewfinder controls
-│   ├── supabase.js   # Cloud database client & bidirectional synchronization
-│   └── ui.js         # Cart, inventory, checkout modal, & receipt renderers
-├── app.js            # Main application controller
-├── index.html        # Main POS interface
-├── style.css         # iOS Human Interface Guidelines stylesheet
-├── manifest.webmanifest # PWA configuration
-├── sw.js             # Service Worker offline asset cache
-├── server.js         # Lightweight local dev server
-├── supabase_schema.sql # Database schema for Supabase
-└── icons/            # App icons
+├── App.js                     # Root React Native application controller
+├── app.json                   # Expo configuration & native permissions
+├── metro.config.js            # Metro bundler config
+├── src/
+│   ├── theme.js               # Design tokens, color system, and typography
+│   ├── state/
+│   │   └── posStore.js        # AsyncStorage state engine, cart, and offline queue
+│   ├── services/
+│   │   ├── supabase.js        # Supabase API client & cloud sync
+│   │   └── feedback.js        # Native haptics & audio synthesis
+│   ├── components/
+│   │   ├── Header.js          # Top navigation bar with status pills
+│   │   ├── BottomTabBar.js    # Bottom navigation tabs with badge count
+│   │   ├── CameraScannerModal.js # Camera barcode scanner with reticle & laser
+│   │   ├── CheckoutModal.js   # Payment tender & change calculator
+│   │   ├── ReceiptModal.js    # Monospace thermal paper receipt preview
+│   │   ├── ReceiveStockModal.js # Add & receive inventory stock modal
+│   │   └── SupabaseSettingsModal.js # Cloud database credentials & sync
+│   └── screens/
+│       ├── SellScreen.js      # Quick catalog grid, cart, and checkout CTA
+│       ├── InventoryScreen.js # Stock list, low-stock filter, stock stepper
+│       └── IncomeScreen.js    # Revenue hero, KPI stats, transaction history
+├── legacy-web/                # Archived legacy HTML/CSS/JS web assets
+└── supabase_schema.sql        # Database schema for Supabase
 ```
 
 ## Getting Started
 
-1. Clone repository:
-   ```bash
-   git clone https://github.com/Theshy691/HB-Works.git
-   cd HB-Works
-   ```
-
-2. Install dependencies:
+1. **Install dependencies**:
    ```bash
    npm install
    ```
 
-3. Setup environment variables:
-   Copy `.env.example` to `.env` and fill in your Supabase credentials:
-   ```bash
-   cp .env.example .env
-   ```
-
-4. Database Setup:
-   Run `supabase_schema.sql` in your Supabase SQL Editor to create the `products` and `sales` tables.
-
-5. Start the local server:
+2. **Start the Expo Development Server**:
    ```bash
    npm start
    ```
-   Open `http://localhost:3000` in your browser or iPhone.
+
+3. **Run on specific platforms**:
+   - **iOS**: `npm run ios` (or scan the QR code with Expo Go on your iPhone)
+   - **Android**: `npm run android` (or scan QR code with Expo Go on Android)
+   - **Web**: `npm run web` (or `npm run build:web` to generate a production web build)
+
+4. **Database Setup**:
+   Run `supabase_schema.sql` in your Supabase SQL Editor. In the app, tap the Cloud / Settings icon in the top header to configure your Supabase URL and Key.

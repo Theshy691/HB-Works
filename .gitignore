@@ -23,3 +23,9 @@ npm-debug.log*
 Thumbs.db
 .vscode/
 .idea/
+
+# Expo & Build Artifacts
+.expo/
+dist/
+web-build/
+

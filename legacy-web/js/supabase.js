@@ -4,9 +4,12 @@ import { products, setProducts, saveLocalState } from './state.js';
 const DEFAULT_SUPABASE_URL = 'https://nxgnarvsggetjlhhsvyw.supabase.co';
 const DEFAULT_SUPABASE_KEY = 'sb_publishable_iMAD-utJJkJOeuxYFGRTBw_YkbyiVGz';
 
+const OFFLINE_QUEUE_KEY = 'hb_pos_offline_sales_queue';
+
 let SUPABASE_URL = localStorage.getItem('hb_pos_supabase_url') || DEFAULT_SUPABASE_URL;
 let SUPABASE_ANON_KEY = localStorage.getItem('hb_pos_supabase_key') || DEFAULT_SUPABASE_KEY;
 let supabase = null;
+let isSyncingQueue = false;
 
 let onProductsUpdatedCallback = null;
 
@@ -49,6 +52,7 @@ export async function ensureSupabaseClient() {
             console.log('Supabase client initialized successfully');
             updateDbStatusUI(true, 'Connected to Cloud');
             pullProductsFromSupabase(true);
+            syncOfflineSalesQueue();
             return supabase;
         } catch (err) {
             console.error('Failed to init Supabase client:', err);
@@ -98,6 +102,7 @@ export async function checkSupabaseHealth(showToastFn) {
         if (error) throw error;
         updateDbStatusUI(true, `Connected to Cloud (${count !== null ? count : 0} items)`);
         if (showToastFn) showToastFn('Supabase connection verified! 🟢');
+        syncOfflineSalesQueue();
     } catch (err) {
         console.error('Supabase health check failed:', err);
         updateDbStatusUI(false, 'Warning: ' + (err.message || 'Check tables'));
@@ -123,11 +128,11 @@ export async function pullProductsFromSupabase(silent = false, showToastFn) {
         if (data && data.length > 0) {
             const normalized = data.map(p => ({
                 id: p.id,
-                name: p.name || p.product_name || 'Item',
-                barcode: String(p.barcode || p.barcode_sku || ''),
-                price: Number(p.price) || 0,
-                quantity_in_stock: Number(p.quantity_in_stock) || 0,
-                category: p.category || 'General'
+                name: String(p.name || 'Item').trim(),
+                barcode: String(p.barcode || '').trim(),
+                price: Math.max(0, Number(p.price) || 0),
+                quantity_in_stock: Math.max(0, Number(p.quantity_in_stock) || 0),
+                category: String(p.category || 'General').trim()
             }));
             setProducts(normalized);
             if (onProductsUpdatedCallback) onProductsUpdatedCallback();
@@ -152,15 +157,20 @@ export async function pushProductsToSupabase(showToastFn) {
 
     try {
         if (showToastFn) showToastFn('Uploading products to cloud...');
-        const payload = products.map(p => ({
-            name: p.name,
-            product_name: p.name,
-            barcode: p.barcode,
-            barcode_sku: p.barcode,
-            price: Number(p.price) || 0,
-            quantity_in_stock: Number(p.quantity_in_stock) || 0,
-            category: p.category || 'General'
-        }));
+        const payload = products
+            .map(p => ({
+                name: String(p.name || 'Item').trim(),
+                barcode: String(p.barcode || '').trim(),
+                price: Math.max(0, Number(p.price) || 0),
+                quantity_in_stock: Math.max(0, Number(p.quantity_in_stock) || 0),
+                category: String(p.category || 'General').trim()
+            }))
+            .filter(p => p.barcode.length > 0 && p.name.length > 0);
+
+        if (payload.length === 0) {
+            if (showToastFn) showToastFn('No valid products to upload');
+            return;
+        }
 
         const { error } = await supabase
             .from('products')
@@ -179,7 +189,7 @@ export async function pushProductsToSupabase(showToastFn) {
 export async function findProductInSupabase(query) {
     await ensureSupabaseClient();
     if (!supabase) return null;
-    const cleanQuery = String(query).trim();
+    const cleanQuery = String(query).replace(/[%,_()]/g, '').trim();
     if (!cleanQuery) return null;
 
     try {
@@ -206,11 +216,11 @@ export async function findProductInSupabase(query) {
         if (data) {
             const normalized = {
                 id: data.id,
-                name: data.name || data.product_name || 'Item',
-                barcode: String(data.barcode || data.barcode_sku || ''),
-                price: Number(data.price) || 0,
-                quantity_in_stock: Number(data.quantity_in_stock) || 0,
-                category: data.category || 'General'
+                name: String(data.name || 'Item').trim(),
+                barcode: String(data.barcode || '').trim(),
+                price: Math.max(0, Number(data.price) || 0),
+                quantity_in_stock: Math.max(0, Number(data.quantity_in_stock) || 0),
+                category: String(data.category || 'General').trim()
             };
             if (!products.some(p => p.id === normalized.id || (normalized.barcode && p.barcode === normalized.barcode))) {
                 products.push(normalized);
@@ -225,53 +235,149 @@ export async function findProductInSupabase(query) {
     return null;
 }
 
-export async function syncSaleToSupabase(saleRecord, cartItems) {
-    await ensureSupabaseClient();
-    if (!supabase) return false;
+// --- Offline Queue Helpers ---
+function getOfflineQueue() {
     try {
+        const stored = localStorage.getItem(OFFLINE_QUEUE_KEY);
+        return stored ? JSON.parse(stored) : [];
+    } catch (e) {
+        return [];
+    }
+}
+
+function saveOfflineQueue(queue) {
+    try {
+        localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(queue));
+    } catch (e) {
+        console.warn('Could not persist offline queue:', e);
+    }
+}
+
+function enqueueOfflineSale(saleRecord, cartItems) {
+    const queue = getOfflineQueue();
+    // Avoid duplicate queue entries
+    if (!queue.some(item => item.saleRecord.id === saleRecord.id)) {
+        queue.push({ saleRecord, cartItems, queuedAt: Date.now() });
+        saveOfflineQueue(queue);
+        console.info(`Queued offline transaction ${saleRecord.id} for auto-sync.`);
+    }
+}
+
+export async function syncOfflineSalesQueue() {
+    if (isSyncingQueue || !supabase) return;
+    const queue = getOfflineQueue();
+    if (queue.length === 0) return;
+
+    isSyncingQueue = true;
+    console.log(`Draining offline sales queue (${queue.length} pending)...`);
+
+    const remaining = [];
+    for (const item of queue) {
+        const success = await executeSaleSync(item.saleRecord, item.cartItems);
+        if (!success) {
+            remaining.push(item);
+        }
+    }
+
+    saveOfflineQueue(remaining);
+    isSyncingQueue = false;
+
+    if (queue.length > remaining.length) {
+        console.log(`Synced ${queue.length - remaining.length} queued offline transactions.`);
+    }
+}
+
+// Low-level sync executor with RPC preference & REST fallback
+async function executeSaleSync(saleRecord, cartItems) {
+    if (!supabase) return false;
+
+    try {
+        // Method A: Attempt atomic database procedure (process_pos_sale)
+        const { data: rpcData, error: rpcErr } = await supabase.rpc('process_pos_sale', {
+            p_transaction_id: String(saleRecord.id),
+            p_total: Number(saleRecord.total) || 0,
+            p_payment_method: String(saleRecord.payMethod || 'Cash'),
+            p_amount_tendered: Number(saleRecord.tendered) || 0,
+            p_change_amount: Number(saleRecord.change) || 0,
+            p_items: saleRecord.items || []
+        });
+
+        if (!rpcErr && rpcData && rpcData.success) {
+            return true;
+        }
+
+        // Method B: Graceful fallback to direct insert & update if RPC is missing
         const { error: saleErr } = await supabase.from('sales').insert([{
-            transaction_id: saleRecord.id,
-            total_amount: Number(saleRecord.total) || 0,
-            payment_method: saleRecord.payMethod,
-            amount_tendered: Number(saleRecord.tendered) || 0,
-            change_amount: Number(saleRecord.change) || 0,
-            items: saleRecord.items
+            transaction_id: String(saleRecord.id),
+            total_amount: Math.max(0, Number(saleRecord.total) || 0),
+            payment_method: String(saleRecord.payMethod || 'Cash'),
+            amount_tendered: Math.max(0, Number(saleRecord.tendered) || 0),
+            change_amount: Math.max(0, Number(saleRecord.change) || 0),
+            items: saleRecord.items || []
         }]);
 
-        if (saleErr) console.warn('Supabase sale insert warning:', saleErr);
+        if (saleErr && saleErr.code !== '23505') { // ignore duplicate key if already synced
+            throw saleErr;
+        }
 
+        // Decrement stock in fallback mode
         for (const cartItem of cartItems) {
             const barcode = cartItem.barcode;
             if (barcode) {
                 const prod = products.find(p => p.barcode === barcode);
-                const newStock = prod ? prod.quantity_in_stock : 0;
+                const newStock = prod ? Math.max(0, prod.quantity_in_stock) : 0;
                 await supabase.from('products')
                     .update({ quantity_in_stock: newStock })
                     .eq('barcode', barcode);
             }
         }
         return true;
-    } catch (dbErr) {
-        console.warn('Supabase sync warning (stored locally):', dbErr);
+    } catch (err) {
+        console.warn('executeSaleSync failed:', err);
         return false;
     }
+}
+
+export async function syncSaleToSupabase(saleRecord, cartItems) {
+    await ensureSupabaseClient();
+    if (!supabase) {
+        enqueueOfflineSale(saleRecord, cartItems);
+        return false;
+    }
+
+    const success = await executeSaleSync(saleRecord, cartItems);
+    if (!success) {
+        enqueueOfflineSale(saleRecord, cartItems);
+    }
+    return success;
 }
 
 export async function syncStockToSupabase(productData) {
     await ensureSupabaseClient();
     if (!supabase) return;
     try {
+        const barcode = String(productData.barcode || '').trim();
+        const name = String(productData.name || 'Item').trim();
+        if (!barcode || !name) return;
+
         await supabase.from('products').upsert([{
-            name: productData.name,
-            product_name: productData.name,
-            barcode: productData.barcode,
-            barcode_sku: productData.barcode,
-            price: Number(productData.price) || 0,
-            quantity_in_stock: Number(productData.quantity_in_stock) || 0
+            name: name,
+            barcode: barcode,
+            price: Math.max(0, Number(productData.price) || 0),
+            quantity_in_stock: Math.max(0, Number(productData.quantity_in_stock) || 0),
+            category: String(productData.category || 'General').trim()
         }], { onConflict: 'barcode' });
     } catch (dbErr) {
         console.warn('Could not sync stock to Supabase:', dbErr);
     }
+}
+
+// Auto-sync listener when browser reconnects to internet
+if (typeof window !== 'undefined') {
+    window.addEventListener('online', () => {
+        console.log('Network online. Triggering Supabase cloud sync...');
+        ensureSupabaseClient().then(() => syncOfflineSalesQueue());
+    });
 }
 
 export function setupSupabaseModal(showToastFn) {
@@ -309,7 +415,13 @@ export function setupSupabaseModal(showToastFn) {
             const key = (keyInput.value || '').trim();
 
             if (!url || !key) {
-                alert('Please enter both your Supabase Project URL and Anon API Key.');
+                alert('Please enter both your Supabase Project URL and Anon/Publishable API Key.');
+                return;
+            }
+
+            // Security sanity check: Never store secret / service_role keys on client
+            if (key.startsWith('sb_secret_') || key.toLowerCase().includes('service_role')) {
+                alert('SECURITY WARNING: Do NOT use a Secret Key or Service Role Key in the client browser! Use only your Anon / Publishable key (sb_publishable_...).');
                 return;
             }
 

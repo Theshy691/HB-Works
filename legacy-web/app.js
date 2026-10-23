@@ -20,6 +20,7 @@ import {
     findProductInSupabase,
     syncSaleToSupabase,
     syncStockToSupabase,
+    syncOfflineSalesQueue,
     registerOnProductsUpdated
 } from './js/supabase.js';
 
@@ -100,7 +101,7 @@ export async function findAndAddToCart(input) {
 
 // --- Checkout Transaction Processor ---
 export async function processSale(total, payMethod, tendered) {
-    const txnId = `TXN-${Math.floor(1000 + Math.random() * 9000)}`;
+    const txnId = `TXN-${Date.now().toString(36).toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`;
     const change = Math.max(0, tendered - total);
     const cartSnapshot = cart.map(i => ({ ...i }));
 
@@ -201,6 +202,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Supabase Cloud Initialization
     initSupabaseClient();
     setupSupabaseModal(showToast);
+    syncOfflineSalesQueue();
 
     // Initial View Renders
     renderCart();

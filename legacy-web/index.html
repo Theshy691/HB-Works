@@ -396,8 +396,8 @@
                 </div>
 
                 <div class="form-group">
-                    <label for="supabase-key-input">Anon Public API Key</label>
-                    <input type="password" id="supabase-key-input" placeholder="eyJhbGciOi..." autocomplete="off" autocorrect="off" autocapitalize="off">
+                    <label for="supabase-key-input">Anon / Publishable API Key</label>
+                    <input type="password" id="supabase-key-input" placeholder="sb_publishable_... or anon JWT" autocomplete="off" autocorrect="off" autocapitalize="off">
                 </div>
 
                 <div class="modal-actions-stacked">
@@ -409,7 +409,7 @@
                 </div>
 
                 <div class="db-help-box">
-                    <small>Database tables (<code>products</code> &amp; <code>sales</code>) must be created in your Supabase project. A ready-to-run schema script is provided in <code>supabase_schema.sql</code>.</small>
+                    <small>Database tables (<code>products</code> &amp; <code>sales</code>) must be created in Supabase with RLS enabled. Run the hardened script in <code>supabase_schema.sql</code>.<br><strong>Security Notice:</strong> Never enter a Secret Key or Service Role key into the browser.</small>
                 </div>
             </div>
         </div>

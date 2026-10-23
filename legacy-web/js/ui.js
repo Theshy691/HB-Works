@@ -252,12 +252,12 @@ export function renderCart() {
             </div>
             <div class="item-right-actions">
                 <div class="qty-stepper">
-                    <button type="button" class="qty-step-btn" data-action="dec" data-id="${item.id}" aria-label="Decrease">&minus;</button>
+                    <button type="button" class="qty-step-btn" data-action="dec" data-id="${escapeHtml(item.id)}" aria-label="Decrease">&minus;</button>
                     <span class="qty-display">${itemQty}</span>
-                    <button type="button" class="qty-step-btn" data-action="inc" data-id="${item.id}" aria-label="Increase">&plus;</button>
+                    <button type="button" class="qty-step-btn" data-action="inc" data-id="${escapeHtml(item.id)}" aria-label="Increase">&plus;</button>
                 </div>
                 <span class="item-price">${formatCurrency(itemTotal)}</span>
-                <button type="button" class="delete-item-btn" data-id="${item.id}" aria-label="Remove item">
+                <button type="button" class="delete-item-btn" data-id="${escapeHtml(item.id)}" aria-label="Remove item">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
                 </button>
             </div>
@@ -489,8 +489,23 @@ export function setupReceiveStockModal(onStockSavedFn, startCameraFn) {
             e.preventDefault();
             const barcode = document.getElementById('stock-barcode').value.trim();
             const name = document.getElementById('stock-name').value.trim();
-            const price = parseFloat(document.getElementById('stock-price').value) || 0;
-            const qty = parseInt(document.getElementById('stock-qty').value, 10) || 0;
+            const rawPrice = parseFloat(document.getElementById('stock-price').value);
+            const rawQty = parseInt(document.getElementById('stock-qty').value, 10);
+
+            if (!name || !barcode) {
+                playBeep('error');
+                showToast('Item name and barcode are required');
+                return;
+            }
+
+            if (isNaN(rawPrice) || rawPrice < 0 || isNaN(rawQty) || rawQty < 0) {
+                playBeep('error');
+                showToast('Price and quantity must be valid non-negative numbers');
+                return;
+            }
+
+            const price = rawPrice;
+            const qty = rawQty;
 
             const existingIndex = products.findIndex(p => p.barcode === barcode);
 
