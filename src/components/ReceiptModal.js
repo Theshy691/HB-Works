@@ -9,6 +9,7 @@ import {
   ScrollView,
   Platform,
   Share,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, radius, spacing, formatCurrency } from '../theme';
@@ -90,7 +91,11 @@ CHANGE:         ${formatCurrency(sale.change || 0)}
             <View style={styles.paper}>
               {/* Receipt Header */}
               <View style={styles.paperCenter}>
-                <Ionicons name="car-sport" size={28} color="#111827" />
+                <Image
+                  source={require('../../assets/hb-logo.png')}
+                  style={styles.receiptLogo}
+                  resizeMode="contain"
+                />
                 <Text style={styles.receiptBrand}>{storeName}</Text>
                 <Text style={styles.receiptSubtext}>{storeAddress}</Text>
                 <Text style={styles.receiptSubtext}>Tel: (02) 8888-MOTOR</Text>
@@ -253,6 +258,12 @@ const styles = StyleSheet.create({
   paperCenter: {
     alignItems: 'center',
     marginVertical: spacing.xs,
+  },
+  receiptLogo: {
+    width: 60,
+    height: 60,
+    borderRadius: 12,
+    marginBottom: 6,
   },
   receiptBrand: {
     color: '#111827',

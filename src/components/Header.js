@@ -1,6 +1,6 @@
 // HB Works POS - Header Component
 import React from 'react';
-import { StyleSheet, View, Text, TouchableOpacity } from 'react-native';
+import { StyleSheet, View, Text, TouchableOpacity, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { colors, radius, spacing } from '../theme';
 
@@ -14,9 +14,11 @@ export default function Header({
   return (
     <View style={styles.container}>
       <View style={styles.leftSection}>
-        <View style={styles.brandBadge}>
-          <Text style={styles.brandText}>HB</Text>
-        </View>
+        <Image
+          source={require('../../assets/hb-logo.png')}
+          style={styles.logoImage}
+          resizeMode="cover"
+        />
         <Text style={styles.titleText}>{title}</Text>
       </View>
 
@@ -84,17 +86,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
   },
-  brandBadge: {
-    backgroundColor: colors.primary,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: radius.xs,
-  },
-  brandText: {
-    color: '#FFFFFF',
-    fontWeight: '800',
-    fontSize: 14,
-    letterSpacing: 0.5,
+  logoImage: {
+    width: 34,
+    height: 34,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 0, 85, 0.3)',
   },
   titleText: {
     color: colors.text,
