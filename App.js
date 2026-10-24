@@ -55,8 +55,14 @@ export default function App() {
   const [transactions, setTransactions] = useState([]);
   const [offlineQueue, setOfflineQueue] = useState([]);
   const [settings, setSettings] = useState({
-    supabaseUrl: 'https://nxgnarvsggetjlhhsvyw.supabase.co',
-    supabaseKey: 'sb_publishable_iMAD-utJJkJOeuxYFGRTBw_YkbyiVGz',
+    supabaseUrl:
+      process.env.EXPO_PUBLIC_SUPABASE_URL ||
+      process.env.SUPABASE_URL ||
+      'https://nxgnarvsggetjlhhsvyw.supabase.co',
+    supabaseKey:
+      process.env.EXPO_PUBLIC_SUPABASE_KEY ||
+      process.env.SUPABASE_PUBLISHABLE_KEY ||
+      'sb_publishable_iMAD-utJJkJOeuxYFGRTBw_YkbyiVGz',
     soundEnabled: true,
     storeName: 'HB WORKS MOTOR SHOP',
     storeAddress: 'Taguig City, Philippines',
@@ -303,7 +309,7 @@ export default function App() {
             (p.quantity_in_stock || 0) - (inCart.cart_quantity || 1)
           );
           if (isOnline) {
-            updateStock(settings.supabaseUrl, settings.supabaseKey, p.id, newQty);
+            updateStock(settings.supabaseUrl, settings.supabaseKey, p.id, newQty, p.barcode);
           }
           return { ...p, quantity_in_stock: newQty };
         }
@@ -362,7 +368,7 @@ export default function App() {
           if (p.id === productId) {
             const newStock = Math.max(0, (p.quantity_in_stock || 0) + delta);
             if (isOnline) {
-              updateStock(settings.supabaseUrl, settings.supabaseKey, p.id, newStock);
+              updateStock(settings.supabaseUrl, settings.supabaseKey, p.id, newStock, p.barcode);
             }
             return { ...p, quantity_in_stock: newStock };
           }
@@ -424,15 +430,26 @@ export default function App() {
         saveProductsToStorage(cloudProducts);
       }
 
-      // 2. Push offline queue
+      // 2. Push offline queue safely
       if (offlineQueue.length > 0) {
+        const remainingQueue = [];
         for (const item of offlineQueue) {
-          await recordSale(settings.supabaseUrl, settings.supabaseKey, item);
+          const ok = await recordSale(settings.supabaseUrl, settings.supabaseKey, item);
+          if (!ok) {
+            remainingQueue.push(item);
+          }
         }
-        setOfflineQueue([]);
-        saveOfflineQueueToStorage([]);
+        setOfflineQueue(remainingQueue);
+        saveOfflineQueueToStorage(remainingQueue);
+
+        if (remainingQueue.length > 0) {
+          showToast(`Synced with ${remainingQueue.length} items still pending`);
+        } else {
+          showToast('Database & offline queue synced!');
+        }
+      } else {
+        showToast('Database synced successfully!');
       }
-      showToast('Database synced successfully!');
     } else {
       showToast('Sync failed: Could not connect');
     }

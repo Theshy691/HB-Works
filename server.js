@@ -46,14 +46,15 @@ function setSecurityHeaders(res, contentType, filePath) {
     "default-src 'self'; " +
     "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; " +
     "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
-    "font-src 'self' https://fonts.gstatic.com; " +
-    "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://cdn.jsdelivr.net; " +
-    "img-src 'self' data: blob:; " +
+    "font-src 'self' https://fonts.gstatic.com data:; " +
+    "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://cdn.jsdelivr.net ws: wss:; " +
+    "img-src 'self' data: blob: https:; " +
     "media-src 'self' blob:; " +
     "object-src 'none'; " +
     "base-uri 'self'; " +
     "form-action 'self';"
   );
+
 
   // Cache Control: no-cache for index.html and sw.js; static asset caching for others
   const basename = path.basename(filePath).toLowerCase();

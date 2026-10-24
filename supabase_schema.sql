@@ -12,11 +12,14 @@ create table if not exists public.products (
 
 -- Ensure all required columns exist with proper data types
 alter table public.products add column if not exists name text;
+alter table public.products add column if not exists product_name text;
 alter table public.products add column if not exists barcode text;
+alter table public.products add column if not exists barcode_sku text;
 alter table public.products add column if not exists price numeric(10, 2) default 0.00;
 alter table public.products add column if not exists quantity_in_stock integer default 0;
 alter table public.products add column if not exists category text default 'General';
 alter table public.products add column if not exists updated_at timestamp with time zone default timezone('utc'::text, now());
+
 
 -- Add integrity constraints safely
 do $$
@@ -50,11 +53,13 @@ create table if not exists public.sales (
 );
 
 alter table public.sales add column if not exists transaction_id text;
+alter table public.sales add column if not exists cashier_name text;
 alter table public.sales add column if not exists total_amount numeric(10, 2) default 0.00;
 alter table public.sales add column if not exists payment_method text default 'Cash';
 alter table public.sales add column if not exists amount_tendered numeric(10, 2) default 0.00;
 alter table public.sales add column if not exists change_amount numeric(10, 2) default 0.00;
 alter table public.sales add column if not exists items jsonb default '[]'::jsonb;
+
 
 -- Add sales integrity constraints safely
 do $$
@@ -203,7 +208,7 @@ begin
     if p_items is not null and jsonb_array_length(p_items) > 0 then
         for v_item in select * from jsonb_array_elements(p_items) loop
             v_barcode := v_item->>'barcode';
-            v_qty := coalesce((v_item->>'qty')::int, 1);
+            v_qty := coalesce((v_item->>'quantity')::int, (v_item->>'qty')::int, (v_item->>'cart_quantity')::int, 1);
             if v_barcode is not null and length(trim(v_barcode)) > 0 and v_qty > 0 then
                 update public.products
                 set quantity_in_stock = greatest(0, quantity_in_stock - v_qty),
@@ -211,6 +216,7 @@ begin
                 where barcode = v_barcode;
             end if;
         end loop;
+
     end if;
 
     return jsonb_build_object(
