@@ -1,4 +1,4 @@
-// HB Works POS - Checkout & Payment Tender Modal
+// HB Works POS - Executive Cashier & Checkout Tender Modal
 import React, { useState, useEffect } from 'react';
 import {
   StyleSheet,
@@ -67,26 +67,29 @@ export default function CheckoutModal({
     >
       <View style={styles.overlay}>
         <View style={styles.sheetContainer}>
-          {/* Sheet Header */}
+          {/* Header */}
           <View style={styles.sheetHeader}>
             <View style={styles.sheetDragBar} />
             <View style={styles.headerRow}>
-              <Text style={styles.title}>Payment Checkout</Text>
+              <View style={styles.headerTitleRow}>
+                <Ionicons name="card-outline" size={20} color={colors.primary} />
+                <Text style={styles.title}>Counter Checkout</Text>
+              </View>
               <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-                <Ionicons name="close" size={24} color={colors.textSecondary} />
+                <Ionicons name="close" size={22} color={colors.textSecondary} />
               </TouchableOpacity>
             </View>
           </View>
 
           <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-            {/* Total Due Banner */}
-            <View style={styles.totalBanner}>
+            {/* Amount Due Executive Banner */}
+            <View style={styles.totalHeroCard}>
               <Text style={styles.totalLabel}>TOTAL AMOUNT DUE</Text>
               <Text style={styles.totalValue}>{formatCurrency(total)}</Text>
             </View>
 
             {/* Payment Method Selector */}
-            <Text style={styles.sectionTitle}>Select Payment Method</Text>
+            <Text style={styles.sectionHeader}>PAYMENT TENDER METHOD</Text>
             <View style={styles.methodRow}>
               {['Cash', 'GCash', 'Card'].map((method) => {
                 const isSelected = payMethod === method;
@@ -113,7 +116,7 @@ export default function CheckoutModal({
                           ? 'phone-portrait-outline'
                           : 'card-outline'
                       }
-                      size={20}
+                      size={18}
                       color={isSelected ? '#FFFFFF' : colors.textSecondary}
                     />
                     <Text
@@ -132,33 +135,35 @@ export default function CheckoutModal({
             {/* Cash Tender Interface */}
             {payMethod === 'Cash' && (
               <>
-                <Text style={styles.sectionTitle}>Quick Tender (Cash)</Text>
+                <Text style={styles.sectionHeader}>QUICK BANKNOTE TENDER</Text>
                 <View style={styles.quickGrid}>
-                  {quickTenderOptions.map((opt, idx) => (
-                    <TouchableOpacity
-                      key={idx}
-                      style={[
-                        styles.quickBtn,
-                        tenderedAmount === opt.amount && styles.quickBtnActive,
-                      ]}
-                      onPress={() => handleQuickTender(opt.amount)}
-                      activeOpacity={0.7}
-                    >
-                      <Text
+                  {quickTenderOptions.map((opt, idx) => {
+                    const isActive = tenderedAmount === opt.amount;
+                    return (
+                      <TouchableOpacity
+                        key={idx}
                         style={[
-                          styles.quickBtnText,
-                          tenderedAmount === opt.amount &&
-                            styles.quickBtnTextActive,
+                          styles.quickBtn,
+                          isActive && styles.quickBtnActive,
                         ]}
+                        onPress={() => handleQuickTender(opt.amount)}
+                        activeOpacity={0.7}
                       >
-                        {opt.label}
-                      </Text>
-                    </TouchableOpacity>
-                  ))}
+                        <Text
+                          style={[
+                            styles.quickBtnText,
+                            isActive && styles.quickBtnTextActive,
+                          ]}
+                        >
+                          {opt.label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
                 </View>
 
                 {/* Custom Cash Input */}
-                <Text style={styles.sectionTitle}>Custom Cash Tendered</Text>
+                <Text style={styles.sectionHeader}>ENTER CASH AMOUNT</Text>
                 <View style={styles.inputContainer}>
                   <Text style={styles.currencyPrefix}>{CURRENCY_SYMBOL}</Text>
                   <TextInput
@@ -176,31 +181,44 @@ export default function CheckoutModal({
                     >
                       <Ionicons
                         name="close-circle"
-                        size={20}
+                        size={18}
                         color={colors.textMuted}
                       />
                     </TouchableOpacity>
                   ) : null}
                 </View>
 
-                {/* Change Due Card */}
+                {/* Change Due Callout */}
                 <View
                   style={[
                     styles.changeCard,
                     isShort ? styles.changeCardShort : styles.changeCardSuccess,
                   ]}
                 >
-                  <Text style={styles.changeLabel}>
-                    {isShort ? 'INSUFFICIENT TENDER' : 'CHANGE DUE'}
-                  </Text>
+                  <View style={styles.changeLabelRow}>
+                    <Ionicons
+                      name={isShort ? 'alert-circle' : 'checkmark-circle'}
+                      size={18}
+                      color={isShort ? colors.danger : colors.success}
+                    />
+                    <Text
+                      style={[
+                        styles.changeLabel,
+                        isShort ? styles.textShort : styles.textSuccess,
+                      ]}
+                    >
+                      {isShort ? 'INSUFFICIENT AMOUNT' : 'CHANGE DUE TO CUSTOMER'}
+                    </Text>
+                  </View>
+
                   <Text
                     style={[
                       styles.changeValue,
-                      isShort ? styles.textDanger : styles.textSuccess,
+                      isShort ? styles.textShort : styles.textSuccess,
                     ]}
                   >
                     {isShort
-                      ? `Need ${formatCurrency(total - tenderedAmount)} more`
+                      ? `Short by ${formatCurrency(total - tenderedAmount)}`
                       : formatCurrency(changeDue)}
                   </Text>
                 </View>
@@ -217,11 +235,11 @@ export default function CheckoutModal({
               ]}
               onPress={handleSubmit}
               disabled={isShort}
-              activeOpacity={0.8}
+              activeOpacity={0.85}
             >
-              <Ionicons name="checkmark-circle" size={24} color="#FFFFFF" />
+              <Ionicons name="checkmark-sharp" size={20} color="#FFFFFF" />
               <Text style={styles.submitBtnText}>
-                Complete Sale & Print Receipt
+                {isShort ? 'Enter Tender to Finalize' : 'Complete Transaction & Print'}
               </Text>
             </TouchableOpacity>
           </View>
@@ -234,80 +252,90 @@ export default function CheckoutModal({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.65)',
+    backgroundColor: 'rgba(0, 0, 0, 0.75)',
     justifyContent: 'flex-end',
   },
   sheetContainer: {
     backgroundColor: colors.surface,
     borderTopLeftRadius: radius.xl,
     borderTopRightRadius: radius.xl,
-    maxHeight: '90%',
-    paddingBottom: Platform.OS === 'ios' ? 24 : 12,
+    maxHeight: '88%',
+    paddingBottom: Platform.OS === 'ios' ? 24 : 14,
+    borderTopWidth: 1,
+    borderColor: colors.borderLight,
   },
   sheetHeader: {
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.sm,
-    paddingBottom: spacing.sm,
+    paddingTop: 8,
+    paddingBottom: 10,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
-    alignItems: 'center',
   },
   sheetDragBar: {
-    width: 44,
-    height: 5,
-    borderRadius: 2.5,
-    backgroundColor: colors.borderLight,
-    marginBottom: spacing.sm,
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.textDim,
+    alignSelf: 'center',
+    marginBottom: 8,
   },
   headerRow: {
-    width: '100%',
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
   },
+  headerTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   title: {
     color: colors.text,
-    fontSize: 18,
-    fontWeight: '700',
+    fontSize: 16,
+    fontWeight: '800',
   },
   closeBtn: {
-    padding: spacing.xs,
+    padding: 4,
   },
   content: {
-    padding: spacing.lg,
+    paddingHorizontal: spacing.lg,
+    paddingTop: 12,
   },
-  totalBanner: {
-    backgroundColor: colors.surfaceLight,
-    borderRadius: radius.lg,
-    padding: spacing.lg,
-    alignItems: 'center',
-    marginBottom: spacing.lg,
+  totalHeroCard: {
+    backgroundColor: colors.surfaceElevated,
+    borderRadius: radius.md,
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: colors.borderHighlight,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
+    alignItems: 'center',
+    marginBottom: 16,
   },
   totalLabel: {
-    color: colors.textSecondary,
-    fontSize: 12,
-    fontWeight: '700',
-    letterSpacing: 1,
+    color: colors.textMuted,
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+    marginBottom: 4,
   },
   totalValue: {
-    color: colors.primary,
-    fontSize: 34,
-    fontWeight: '800',
-    marginTop: 4,
+    color: colors.text,
+    fontSize: 32,
+    fontWeight: '900',
+    letterSpacing: -0.6,
   },
-  sectionTitle: {
+  sectionHeader: {
     color: colors.textSecondary,
-    fontSize: 13,
-    fontWeight: '600',
-    marginBottom: spacing.sm,
-    marginTop: spacing.sm,
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+    marginBottom: 8,
+    marginTop: 4,
   },
   methodRow: {
     flexDirection: 'row',
-    gap: spacing.sm,
-    marginBottom: spacing.md,
+    gap: 8,
+    marginBottom: 16,
   },
   methodTab: {
     flex: 1,
@@ -315,11 +343,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    paddingVertical: spacing.md,
     backgroundColor: colors.surfaceLight,
-    borderRadius: radius.md,
+    borderRadius: radius.sm,
     borderWidth: 1,
     borderColor: colors.border,
+    paddingVertical: 10,
   },
   methodTabActive: {
     backgroundColor: colors.primary,
@@ -327,8 +355,8 @@ const styles = StyleSheet.create({
   },
   methodText: {
     color: colors.textSecondary,
-    fontWeight: '600',
-    fontSize: 14,
+    fontSize: 12,
+    fontWeight: '700',
   },
   methodTextActive: {
     color: '#FFFFFF',
@@ -336,114 +364,116 @@ const styles = StyleSheet.create({
   quickGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: spacing.sm,
-    marginBottom: spacing.md,
+    gap: 8,
+    marginBottom: 14,
   },
   quickBtn: {
-    width: '31%',
+    width: '31.3%',
     backgroundColor: colors.surfaceLight,
-    paddingVertical: spacing.md,
-    borderRadius: radius.md,
-    alignItems: 'center',
+    borderRadius: radius.sm,
     borderWidth: 1,
     borderColor: colors.border,
+    paddingVertical: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   quickBtnActive: {
-    backgroundColor: 'rgba(16, 185, 129, 0.2)',
-    borderColor: colors.success,
+    borderColor: colors.cashTender,
+    backgroundColor: 'rgba(16, 185, 129, 0.12)',
   },
   quickBtnText: {
     color: colors.text,
-    fontWeight: '700',
-    fontSize: 15,
+    fontSize: 13,
+    fontWeight: '800',
   },
   quickBtnTextActive: {
-    color: colors.success,
+    color: colors.cashTender,
   },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.surfaceLight,
-    borderRadius: radius.md,
+    backgroundColor: colors.surfaceElevated,
+    borderRadius: radius.sm,
     borderWidth: 1,
-    borderColor: colors.border,
-    paddingHorizontal: spacing.md,
-    height: 52,
-    marginBottom: spacing.md,
+    borderColor: colors.borderLight,
+    paddingHorizontal: 14,
+    height: 48,
+    marginBottom: 14,
   },
   currencyPrefix: {
-    color: colors.textMuted,
-    fontSize: 20,
-    fontWeight: '700',
+    color: colors.textSecondary,
+    fontSize: 18,
+    fontWeight: '800',
     marginRight: 6,
   },
   tenderInput: {
     flex: 1,
     color: colors.text,
     fontSize: 20,
-    fontWeight: '700',
+    fontWeight: '800',
+    height: '100%',
   },
   clearInputBtn: {
-    padding: spacing.xs,
+    padding: 6,
   },
   changeCard: {
-    borderRadius: radius.lg,
-    padding: spacing.md,
-    alignItems: 'center',
+    borderRadius: radius.md,
     borderWidth: 1,
-    marginBottom: spacing.lg,
+    padding: 14,
+    marginBottom: 18,
+    gap: 4,
   },
   changeCardSuccess: {
-    backgroundColor: 'rgba(16, 185, 129, 0.12)',
+    backgroundColor: 'rgba(16, 185, 129, 0.08)',
     borderColor: 'rgba(16, 185, 129, 0.3)',
   },
   changeCardShort: {
-    backgroundColor: 'rgba(239, 68, 68, 0.12)',
-    borderColor: 'rgba(239, 68, 68, 0.3)',
+    backgroundColor: 'rgba(244, 63, 94, 0.08)',
+    borderColor: 'rgba(244, 63, 94, 0.3)',
+  },
+  changeLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   changeLabel: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '800',
-    letterSpacing: 1,
-    color: colors.textSecondary,
+    letterSpacing: 0.6,
   },
   changeValue: {
-    fontSize: 24,
-    fontWeight: '800',
+    fontSize: 22,
+    fontWeight: '900',
+    letterSpacing: -0.4,
     marginTop: 2,
   },
   textSuccess: {
-    color: colors.success,
+    color: colors.cashTender,
   },
-  textDanger: {
+  textShort: {
     color: colors.danger,
   },
   footer: {
     paddingHorizontal: spacing.lg,
-    paddingTop: spacing.sm,
+    paddingTop: 8,
   },
   submitBtn: {
-    backgroundColor: colors.success,
-    borderRadius: radius.lg,
-    paddingVertical: spacing.md,
+    backgroundColor: colors.cashTender,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: spacing.sm,
-    shadowColor: colors.success,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 4,
+    gap: 8,
+    paddingVertical: 14,
+    borderRadius: radius.md,
   },
   submitBtnDisabled: {
-    backgroundColor: colors.borderLight,
-    shadowOpacity: 0,
-    elevation: 0,
+    backgroundColor: colors.surfaceLight,
+    opacity: 0.6,
   },
   submitBtnText: {
     color: '#FFFFFF',
-    fontWeight: '700',
-    fontSize: 16,
+    fontSize: 14,
+    fontWeight: '900',
+    letterSpacing: 0.4,
   },
 });

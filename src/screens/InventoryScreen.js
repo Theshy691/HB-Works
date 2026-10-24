@@ -1,4 +1,4 @@
-// HB Works POS - Inventory Management Screen
+// HB Works POS - Executive Inventory Management Screen
 import React, { useState, useMemo } from 'react';
 import {
   StyleSheet,
@@ -24,10 +24,24 @@ export default function InventoryScreen({
 
   const lowStockThreshold = 10;
 
-  const lowStockCount = useMemo(() => {
-    return products.filter(
-      (p) => (p.quantity_in_stock || 0) <= lowStockThreshold
-    ).length;
+  // Inventory analytics
+  const { lowStockCount, totalValuation, totalUnits } = useMemo(() => {
+    let lowCount = 0;
+    let valuation = 0;
+    let units = 0;
+
+    products.forEach((p) => {
+      const stock = p.quantity_in_stock || 0;
+      if (stock <= lowStockThreshold) lowCount += 1;
+      valuation += (p.price || 0) * stock;
+      units += stock;
+    });
+
+    return {
+      lowStockCount: lowCount,
+      totalValuation: valuation,
+      totalUnits: units,
+    };
   }, [products]);
 
   const filteredProducts = useMemo(() => {
@@ -46,7 +60,7 @@ export default function InventoryScreen({
   }, [products, filterMode, searchQuery]);
 
   const handleDelete = (product) => {
-    const confirmMessage = `Are you sure you want to delete "${product.name}"?`;
+    const confirmMessage = `Are you sure you want to delete "${product.name}" from inventory?`;
     if (Platform.OS === 'web') {
       if (window.confirm(confirmMessage)) {
         onDeleteProduct(product.id);
@@ -70,13 +84,60 @@ export default function InventoryScreen({
         contentContainerStyle={styles.scrollContent}
         showsVerticalScrollIndicator={false}
       >
-        {/* Controls: Search & Add Stock */}
+        {/* KPI Summary Cards */}
+        <View style={styles.kpiGrid}>
+          <View style={styles.kpiCard}>
+            <Text style={styles.kpiLabel}>TOTAL SKUs</Text>
+            <Text style={styles.kpiValue}>{products.length}</Text>
+            <Text style={styles.kpiSub}>{totalUnits} total units</Text>
+          </View>
+
+          <View
+            style={[
+              styles.kpiCard,
+              lowStockCount > 0 && styles.kpiCardWarning,
+            ]}
+          >
+            <View style={styles.kpiRowHeader}>
+              <Text
+                style={[
+                  styles.kpiLabel,
+                  lowStockCount > 0 && { color: colors.warning },
+                ]}
+              >
+                LOW STOCK
+              </Text>
+              {lowStockCount > 0 && (
+                <View style={styles.warningDot} />
+              )}
+            </View>
+            <Text
+              style={[
+                styles.kpiValue,
+                lowStockCount > 0 && { color: colors.warning },
+              ]}
+            >
+              {lowStockCount}
+            </Text>
+            <Text style={styles.kpiSub}>Threshold: ≤ 10 units</Text>
+          </View>
+
+          <View style={styles.kpiCard}>
+            <Text style={styles.kpiLabel}>INVENTORY VALUE</Text>
+            <Text style={styles.kpiValueValuation}>
+              {formatCurrency(totalValuation)}
+            </Text>
+            <Text style={styles.kpiSub}>Retail value</Text>
+          </View>
+        </View>
+
+        {/* Controls: Search & Receive Stock CTA */}
         <View style={styles.controlsRow}>
           <View style={styles.searchBox}>
-            <Ionicons name="search" size={18} color={colors.textSecondary} />
+            <Ionicons name="search" size={17} color={colors.textSecondary} />
             <TextInput
               style={styles.searchInput}
-              placeholder="Search inventory or barcode..."
+              placeholder="Filter by SKU, barcode, name..."
               placeholderTextColor={colors.textMuted}
               value={searchQuery}
               onChangeText={setSearchQuery}
@@ -85,7 +146,7 @@ export default function InventoryScreen({
               <TouchableOpacity onPress={() => setSearchQuery('')}>
                 <Ionicons
                   name="close-circle"
-                  size={18}
+                  size={16}
                   color={colors.textMuted}
                 />
               </TouchableOpacity>
@@ -93,16 +154,16 @@ export default function InventoryScreen({
           </View>
 
           <TouchableOpacity
-            style={styles.addBtn}
+            style={styles.receiveBtn}
             onPress={onOpenReceiveStock}
             activeOpacity={0.8}
           >
-            <Ionicons name="add" size={20} color="#FFFFFF" />
-            <Text style={styles.addBtnText}>Add Stock</Text>
+            <Ionicons name="add" size={18} color="#FFFFFF" />
+            <Text style={styles.receiveBtnText}>Receive Stock</Text>
           </TouchableOpacity>
         </View>
 
-        {/* Filter Pills */}
+        {/* Filter Segment Tabs */}
         <View style={styles.filterRow}>
           <TouchableOpacity
             style={[
@@ -110,6 +171,7 @@ export default function InventoryScreen({
               filterMode === 'all' && styles.filterPillActive,
             ]}
             onPress={() => setFilterMode('all')}
+            activeOpacity={0.7}
           >
             <Text
               style={[
@@ -124,17 +186,24 @@ export default function InventoryScreen({
           <TouchableOpacity
             style={[
               styles.filterPill,
-              filterMode === 'low' && styles.filterPillActive,
+              filterMode === 'low' && styles.filterPillActiveWarning,
             ]}
             onPress={() => setFilterMode('low')}
+            activeOpacity={0.7}
           >
+            <Ionicons
+              name="warning-outline"
+              size={13}
+              color={filterMode === 'low' ? '#FFFFFF' : colors.warning}
+            />
             <Text
               style={[
                 styles.filterText,
                 filterMode === 'low' && styles.filterTextActive,
+                filterMode !== 'low' && { color: colors.warning },
               ]}
             >
-              Low Stock ({lowStockCount})
+              Low Stock Alerts ({lowStockCount})
             </Text>
           </TouchableOpacity>
         </View>
@@ -143,32 +212,49 @@ export default function InventoryScreen({
         <View style={styles.listContainer}>
           {filteredProducts.length === 0 ? (
             <View style={styles.emptyState}>
-              <Ionicons name="cube-outline" size={44} color={colors.textMuted} />
+              <Ionicons name="cube-outline" size={40} color={colors.textMuted} />
               <Text style={styles.emptyTitle}>No matching products</Text>
               <Text style={styles.emptySub}>
-                Try adjusting your search or add a new stock item.
+                Try adjusting your search query or tap "+ Receive Stock" to create a new item.
               </Text>
             </View>
           ) : (
             filteredProducts.map((p) => {
-              const isLow = (p.quantity_in_stock || 0) <= lowStockThreshold;
+              const stock = p.quantity_in_stock || 0;
+              const isLow = stock <= lowStockThreshold;
+
               return (
                 <View key={p.id} style={styles.itemCard}>
                   {/* Left Column: Details */}
                   <View style={styles.itemLeft}>
                     <View style={styles.badgeRow}>
-                      <Text style={styles.catBadge}>{p.category || 'General'}</Text>
+                      <View style={styles.catBadge}>
+                        <Text style={styles.catBadgeText}>
+                          {p.category || 'General'}
+                        </Text>
+                      </View>
                       {p.barcode ? (
-                        <Text style={styles.barcodeText}>SKU: {p.barcode}</Text>
+                        <View style={styles.barcodeBadge}>
+                          <Ionicons
+                            name="barcode-outline"
+                            size={12}
+                            color={colors.textMuted}
+                          />
+                          <Text style={styles.barcodeText}>{p.barcode}</Text>
+                        </View>
                       ) : null}
                     </View>
-                    <Text style={styles.itemName}>{p.name}</Text>
+
+                    <Text style={styles.itemName} numberOfLines={2}>
+                      {p.name}
+                    </Text>
+
                     <Text style={styles.itemPrice}>
                       {formatCurrency(p.price)}
                     </Text>
                   </View>
 
-                  {/* Right Column: Stock & Adjust Stepper */}
+                  {/* Right Column: Stock Status & Fast Stepper */}
                   <View style={styles.itemRight}>
                     <View
                       style={[
@@ -178,46 +264,63 @@ export default function InventoryScreen({
                           : styles.stockStatusOk,
                       ]}
                     >
+                      <View
+                        style={[
+                          styles.stockDot,
+                          {
+                            backgroundColor: isLow
+                              ? colors.warning
+                              : colors.success,
+                          },
+                        ]}
+                      />
                       <Text
                         style={[
                           styles.stockStatusText,
-                          isLow ? styles.textWarning : styles.textSuccess,
+                          isLow
+                            ? styles.stockStatusTextLow
+                            : styles.stockStatusTextOk,
                         ]}
                       >
-                        {p.quantity_in_stock || 0} in stock
+                        {stock} in stock {isLow ? '• LOW' : ''}
                       </Text>
                     </View>
 
-                    <View style={styles.adjustRow}>
+                    {/* Stock Stepper */}
+                    <View style={styles.stepperContainer}>
                       <TouchableOpacity
-                        style={styles.adjustBtn}
+                        style={styles.stepperBtn}
                         onPress={() => onAdjustStock(p.id, -1)}
+                        activeOpacity={0.7}
                       >
-                        <Ionicons
-                          name="remove"
-                          size={16}
-                          color={colors.text}
-                        />
+                        <Ionicons name="remove" size={15} color={colors.text} />
                       </TouchableOpacity>
 
+                      <View style={styles.stepperValueBox}>
+                        <Text style={styles.stepperValue}>{stock}</Text>
+                      </View>
+
                       <TouchableOpacity
-                        style={styles.adjustBtn}
+                        style={styles.stepperBtn}
                         onPress={() => onAdjustStock(p.id, 1)}
+                        activeOpacity={0.7}
                       >
-                        <Ionicons name="add" size={16} color={colors.text} />
-                      </TouchableOpacity>
-
-                      <TouchableOpacity
-                        style={styles.trashBtn}
-                        onPress={() => handleDelete(p)}
-                      >
-                        <Ionicons
-                          name="trash-outline"
-                          size={16}
-                          color={colors.danger}
-                        />
+                        <Ionicons name="add" size={15} color={colors.text} />
                       </TouchableOpacity>
                     </View>
+
+                    {/* Delete Action */}
+                    <TouchableOpacity
+                      onPress={() => handleDelete(p)}
+                      style={styles.deleteBtn}
+                      activeOpacity={0.7}
+                    >
+                      <Ionicons
+                        name="trash-outline"
+                        size={15}
+                        color={colors.textDim}
+                      />
+                    </TouchableOpacity>
                   </View>
                 </View>
               );
@@ -238,106 +341,167 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    padding: spacing.md,
+    padding: spacing.lg,
     paddingBottom: 40,
+  },
+  kpiGrid: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 14,
+  },
+  kpiCard: {
+    flex: 1,
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    padding: 12,
+  },
+  kpiCardWarning: {
+    borderColor: 'rgba(245, 158, 11, 0.35)',
+    backgroundColor: 'rgba(245, 158, 11, 0.04)',
+  },
+  kpiRowHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  kpiLabel: {
+    color: colors.textMuted,
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.6,
+  },
+  warningDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: colors.warning,
+  },
+  kpiValue: {
+    color: colors.text,
+    fontSize: 20,
+    fontWeight: '900',
+    letterSpacing: -0.4,
+    marginVertical: 2,
+  },
+  kpiValueValuation: {
+    color: colors.cashTender,
+    fontSize: 14,
+    fontWeight: '900',
+    letterSpacing: -0.2,
+    marginVertical: 5,
+  },
+  kpiSub: {
+    color: colors.textDim,
+    fontSize: 10,
+    fontWeight: '600',
   },
   controlsRow: {
     flexDirection: 'row',
-    gap: spacing.sm,
-    marginBottom: spacing.md,
+    gap: 8,
+    marginBottom: 10,
   },
   searchBox: {
     flex: 1,
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.surface,
-    borderRadius: radius.md,
+    borderRadius: radius.sm,
     borderWidth: 1,
     borderColor: colors.border,
-    paddingHorizontal: spacing.sm,
-    height: 46,
-    gap: 6,
+    paddingHorizontal: 12,
+    height: 42,
+    gap: 8,
   },
   searchInput: {
     flex: 1,
     color: colors.text,
-    fontSize: 14,
+    fontSize: 13,
+    fontWeight: '500',
+    height: '100%',
   },
-  addBtn: {
+  receiveBtn: {
     backgroundColor: colors.primary,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: spacing.md,
-    borderRadius: radius.md,
+    gap: 5,
+    paddingHorizontal: 14,
+    height: 42,
+    borderRadius: radius.sm,
     justifyContent: 'center',
-    height: 46,
   },
-  addBtnText: {
+  receiveBtnText: {
     color: '#FFFFFF',
-    fontWeight: '700',
-    fontSize: 14,
+    fontWeight: '800',
+    fontSize: 12,
+    letterSpacing: 0.3,
   },
   filterRow: {
     flexDirection: 'row',
-    gap: spacing.sm,
-    marginBottom: spacing.md,
+    gap: 8,
+    marginBottom: 14,
   },
   filterPill: {
-    paddingHorizontal: spacing.md,
-    paddingVertical: 8,
-    borderRadius: radius.pill,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
     backgroundColor: colors.surface,
+    borderRadius: radius.pill,
     borderWidth: 1,
     borderColor: colors.border,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
   },
   filterPillActive: {
-    backgroundColor: colors.primary,
-    borderColor: colors.primary,
+    backgroundColor: colors.surfaceElevated,
+    borderColor: colors.borderLight,
+  },
+  filterPillActiveWarning: {
+    backgroundColor: 'rgba(245, 158, 11, 0.2)',
+    borderColor: colors.warning,
   },
   filterText: {
     color: colors.textSecondary,
-    fontSize: 13,
-    fontWeight: '600',
+    fontSize: 11,
+    fontWeight: '700',
   },
   filterTextActive: {
-    color: '#FFFFFF',
+    color: colors.text,
   },
   listContainer: {
-    gap: spacing.sm,
+    gap: 10,
   },
   emptyState: {
-    backgroundColor: colors.surface,
-    borderRadius: radius.xl,
-    padding: spacing.xl,
+    padding: 40,
     alignItems: 'center',
     justifyContent: 'center',
+    gap: 8,
   },
   emptyTitle: {
     color: colors.text,
-    fontSize: 16,
-    fontWeight: '600',
-    marginTop: spacing.sm,
+    fontSize: 15,
+    fontWeight: '700',
   },
   emptySub: {
     color: colors.textMuted,
     fontSize: 12,
-    marginTop: 4,
     textAlign: 'center',
+    lineHeight: 18,
   },
   itemCard: {
     backgroundColor: colors.surface,
-    borderRadius: radius.lg,
-    padding: spacing.md,
+    borderRadius: radius.md,
     borderWidth: 1,
     borderColor: colors.border,
+    padding: 12,
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
   },
   itemLeft: {
     flex: 1,
-    marginRight: spacing.sm,
   },
   badgeRow: {
     flexDirection: 'row',
@@ -346,74 +510,101 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   catBadge: {
-    color: colors.primary,
-    fontSize: 11,
-    fontWeight: '700',
+    backgroundColor: colors.surfaceLight,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  catBadgeText: {
+    color: colors.textMuted,
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
+  },
+  barcodeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
   },
   barcodeText: {
-    color: colors.textMuted,
-    fontSize: 11,
+    color: colors.textDim,
+    fontSize: 10,
+    fontWeight: '600',
     fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
   },
   itemName: {
     color: colors.text,
-    fontSize: 15,
-    fontWeight: '600',
+    fontSize: 13,
+    fontWeight: '700',
+    lineHeight: 18,
     marginBottom: 4,
   },
   itemPrice: {
-    color: colors.cashTender,
-    fontSize: 15,
+    color: colors.text,
+    fontSize: 14,
     fontWeight: '800',
+    letterSpacing: -0.3,
   },
   itemRight: {
     alignItems: 'flex-end',
     gap: 8,
   },
   stockStatusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: radius.xs,
   },
   stockStatusOk: {
-    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+    backgroundColor: 'rgba(16, 185, 129, 0.1)',
   },
   stockStatusLow: {
-    backgroundColor: 'rgba(245, 158, 11, 0.15)',
+    backgroundColor: 'rgba(245, 158, 11, 0.12)',
+  },
+  stockDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
   },
   stockStatusText: {
-    fontSize: 12,
-    fontWeight: '700',
+    fontSize: 10,
+    fontWeight: '800',
   },
-  textSuccess: {
+  stockStatusTextOk: {
     color: colors.success,
   },
-  textWarning: {
+  stockStatusTextLow: {
     color: colors.warning,
   },
-  adjustRow: {
+  stepperContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-  },
-  adjustBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: radius.sm,
     backgroundColor: colors.surfaceLight,
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderRadius: radius.sm,
     borderWidth: 1,
     borderColor: colors.border,
+    padding: 2,
   },
-  trashBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: radius.sm,
-    backgroundColor: colors.surfaceLight,
+  stepperBtn: {
+    width: 28,
+    height: 28,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: colors.border,
+  },
+  stepperValueBox: {
+    minWidth: 26,
+    alignItems: 'center',
+  },
+  stepperValue: {
+    color: colors.text,
+    fontSize: 12,
+    fontWeight: '800',
+  },
+  deleteBtn: {
+    padding: 3,
+    marginTop: -2,
   },
 });
